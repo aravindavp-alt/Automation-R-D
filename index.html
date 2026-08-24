@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sign in to your Northstar workspace.">
+  <title>Northstar | Sign in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="brand-panel" aria-label="Northstar introduction">
+      <div class="brand-mark"><span class="mark-dot"></span>northstar</div>
+      <div class="brand-copy">
+        <p class="eyebrow">A clearer way forward</p>
+        <h1>Make room<br><em>for good work.</em></h1>
+        <p class="lede">Your calm command center for ambitious projects, thoughtful teams, and the details that move everything along.</p>
+      </div>
+      <div class="orbit" aria-hidden="true">
+        <div class="orbit-ring orbit-ring-one"></div>
+        <div class="orbit-ring orbit-ring-two"></div>
+        <div class="orbit-star">✦</div>
+        <div class="orbit-label">EST. 2024<br><span>YOUR NEXT<br>HORIZON</span></div>
+      </div>
+      <div class="panel-footer"><span>01</span><span class="footer-line"></span><span>WORK IN PROGRESS</span></div>
+    </section>
+
+    <section class="form-panel" aria-labelledby="sign-in-title">
+      <div class="form-wrap">
+        <div class="mobile-brand"><span class="mark-dot"></span>northstar</div>
+        <div class="form-heading">
+          <p class="eyebrow">Welcome back</p>
+          <h2 id="sign-in-title">Sign in to<br><span>your workspace.</span></h2>
+          <p class="subcopy">Pick up exactly where you left off.</p>
+        </div>
+
+        <form id="login-form" novalidate>
+          <div class="field-group">
+            <label for="email">Work email</label>
+            <input id="email" name="email" type="email" autocomplete="email" placeholder="you@company.com" required>
+            <p class="field-error" id="email-error" role="alert"></p>
+          </div>
+          <div class="field-group">
+            <div class="label-row">
+              <label for="password">Password</label>
+              <a href="#reset" class="text-link">Forgot password?</a>
+            </div>
+            <div class="password-wrap">
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" minlength="8" required>
+              <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
+            <p class="field-error" id="password-error" role="alert"></p>
+          </div>
+          <label class="check-row">
+            <input type="checkbox" name="remember">
+            <span class="checkmark" aria-hidden="true"></span>
+            <span>Keep me signed in</span>
+          </label>
+          <button class="submit-button" type="submit">Enter workspace <span aria-hidden="true">↗</span></button>
+          <p class="form-status" id="form-status" role="status"></p>
+        </form>
+
+        <div class="divider"><span>or continue with</span></div>
+        <button class="sso-button" type="button"><span class="google-icon" aria-hidden="true">G</span> Continue with Google</button>
+        <p class="signup-copy">New to Northstar? <a href="#signup" class="text-link">Create an account</a></p>
+      </div>
+      <p class="legal-copy">By continuing, you agree to our <a href="#terms" class="text-link">Terms</a> and <a href="#privacy" class="text-link">Privacy Policy</a>.</p>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
