@@ -1,6 +1,6 @@
 # Automation-R-D
 
-NLP browser tests. The `.nlp` file is the source of truth. At run time **Cursor Cloud parses each step** against a live page snapshot and returns Playwright. Locators are not hardcoded in this repo.
+NLP browser tests. The `.nlp` file is the source of truth. Cursor Cloud is called **once** to turn the whole case into Playwright, then that script runs in the browser. A failed run gets **at most one heal** (`CURSOR_HEAL_ATTEMPTS`, default 1) with a short page digest. No per-step Cloud calls.
 
 ## Create Broadcom Standard case
 

@@ -26,12 +26,6 @@ export function loadNlp(filePath: string, env: NodeJS.ProcessEnv = process.env):
     }));
 }
 
-export function isCheckNlp(text: string): boolean {
-  return /^(wait|check|verify|assert|validate)\b/i.test(text.trim())
-    || /\bcheck whether\b/i.test(text)
-    || /\ball form details\b/i.test(text);
-}
-
 export function nlpPath(name: string): string {
   return path.join(process.cwd(), "tests", "nlp", name);
 }

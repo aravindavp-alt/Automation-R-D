@@ -1,82 +1,79 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { isCheckNlp, type NlpStep } from "./nlp";
-import {
-  askCloud,
-  createCloudAgent,
-  extractPlaywrightCode,
-  parseCheckDecision,
-} from "./cursor-cloud";
+import { expect, type Page, type TestInfo } from "@playwright/test";
+import type { NlpStep } from "./nlp";
+import { extractPlaywrightCode, promptCloud } from "./cursor-cloud";
 
 export type RunContext = {
   subject: string;
   description: string;
 };
 
+const HEAL_ATTEMPTS = Math.max(0, Number(process.env.CURSOR_HEAL_ATTEMPTS ?? 1));
+
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
   ...args: string[]
 ) => (...args: unknown[]) => Promise<unknown>;
 
-async function pageDigest(page: Page): Promise<string> {
-  const url = page.url();
-  const title = await page.title();
-  const text = (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 1800);
-  const fields = await page.evaluate(() =>
-    [...document.querySelectorAll("input, textarea, select, mat-select, button, [role='option']")]
-      .slice(0, 50)
-      .map((el) => {
-        const input = el as HTMLInputElement;
-        return {
-          tag: el.tagName.toLowerCase(),
-          id: el.id,
-          type: input.type || "",
-          name: input.name || el.getAttribute("aria-label") || "",
-          text: (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80),
-          value: (input.value || "").slice(0, 80),
-        };
-      }),
-  );
-  return JSON.stringify({ url, title, text, fields }, null, 2);
+function nlpScript(steps: NlpStep[]): string {
+  return steps.map((step) => `${step.index}. ${step.raw}`).join("\n");
 }
 
-function actionPrompt(step: NlpStep, digest: string, ctx: RunContext, failure?: string): string {
+async function compactDigest(page: Page): Promise<string> {
+  const url = page.url();
+  const title = await page.title();
+  const controls = await page.evaluate(() => {
+    const pick = (els: Element[]) =>
+      els
+        .map((el) => {
+          const input = el as HTMLInputElement;
+          return (el.id || input.name || (el.textContent || "").replace(/\s+/g, " ").trim()).slice(0, 40);
+        })
+        .filter(Boolean)
+        .slice(0, 12);
+    return {
+      inputs: pick([...document.querySelectorAll("input, textarea, mat-select")]),
+      buttons: pick([...document.querySelectorAll("button, [role='button']")]),
+    };
+  });
+  return `url=${url}\ntitle=${title}\ninputs=${controls.inputs.join(",")}\nbuttons=${controls.buttons.join(",")}`;
+}
+
+function generatePrompt(nlp: string, ctx: RunContext): string {
   return [
-    "You are generating Playwright for a live browser test.",
-    "Parse the NLP step against the current page snapshot and return executable Playwright JavaScript.",
-    "Use the existing `page` object. You may also use `expect` and `ctx`.",
-    `ctx.subject = ${JSON.stringify(ctx.subject)}`,
-    `ctx.description = ${JSON.stringify(ctx.description)}`,
-    "Do not invent a new page. Do not wrap in a function. Do not import modules.",
-    "Return only a javascript code fence with await page ... commands.",
-    failure ? `Previous attempt failed:\n${failure}` : "",
+    "Write one Playwright script for every NLP step. Use page, expect, ctx.",
+    `ctx.subject and ctx.description are set. Subject hint: ${ctx.subject}`,
+    "Prefer getByRole, getByLabel, getByText. No imports, no comments, no new page.",
+    "Return one javascript fence only.",
     "",
-    `NLP step ${step.index}:`,
-    step.raw,
-    "",
-    "PAGE SNAPSHOT:",
-    digest,
+    nlp,
+  ].join("\n");
+}
+
+function healPrompt(nlp: string, digest: string, failedCode: string, failure: string): string {
+  return [
+    "Heal failed Playwright. Return a replacement javascript fence only.",
+    "Use page, expect, ctx. Different locators than the failed code.",
+    `FAIL: ${failure.slice(0, 180)}`,
+    `PAGE: ${digest}`,
+    `NLP:\n${nlp.slice(0, 900)}`,
+    failedCode ? `FAILED:\n${failedCode.slice(-700)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-function checkPrompt(step: NlpStep, digest: string, ctx: RunContext): string {
-  return [
-    "This NLP step is a check/validate. Do not return Playwright actions.",
-    "Reply with PASS or FAIL on the first line, then a short reason.",
-    `Expected subject: ${ctx.subject}`,
-    `Form description: ${ctx.description}`,
-    "",
-    `NLP step ${step.index}:`,
-    step.raw,
-    "",
-    "PAGE SNAPSHOT:",
-    digest,
-  ].join("\n");
-}
-
 async function runPlaywright(page: Page, ctx: RunContext, code: string): Promise<void> {
   const fn = new AsyncFunction("page", "expect", "ctx", code);
   await fn(page, expect, ctx);
+}
+
+async function requestCode(prompt: string, testInfo: TestInfo | undefined, label: string): Promise<string> {
+  const { answer, runId } = await promptCloud(prompt);
+  testInfo?.annotations.push({ type: "cursor-cloud", description: `${label} ${runId || ""}` });
+  const code = extractPlaywrightCode(answer);
+  if (!code) {
+    throw new Error(`Cursor Cloud returned no Playwright (${label}): ${answer.slice(0, 180)}`);
+  }
+  return code;
 }
 
 export async function runNlpWithCursorCloud(
@@ -85,45 +82,28 @@ export async function runNlpWithCursorCloud(
   ctx: RunContext,
   testInfo?: TestInfo,
 ): Promise<void> {
-  const agent = await createCloudAgent();
+  const nlp = nlpScript(steps);
+  let code = await requestCode(generatePrompt(nlp, ctx), testInfo, "generate");
   try {
-    for (const step of steps) {
-      await test.step(`NLP ${step.index}: ${step.raw.split("\n")[0]}`, async () => {
-        const digest = await pageDigest(page);
-        if (isCheckNlp(step.text)) {
-          const { answer, runId } = await askCloud(agent, checkPrompt(step, digest, ctx));
-          testInfo?.annotations.push({ type: "cursor-cloud", description: `check ${runId || ""}` });
-          const decision = parseCheckDecision(answer);
-          if (!decision.pass) {
-            throw new Error(`NLP check failed: ${decision.reason}`);
-          }
-          return;
+    await runPlaywright(page, ctx, code);
+    return;
+  } catch (error) {
+    if (HEAL_ATTEMPTS < 1) throw error;
+    let lastError = error instanceof Error ? error.message : String(error);
+    for (let attempt = 1; attempt <= HEAL_ATTEMPTS; attempt++) {
+      console.warn(`Cursor Cloud heal ${attempt}/${HEAL_ATTEMPTS}: ${lastError.slice(0, 160)}`);
+      const digest = await compactDigest(page);
+      try {
+        code = await requestCode(healPrompt(nlp, digest, code, lastError), testInfo, `heal-${attempt}`);
+        await runPlaywright(page, ctx, code);
+        console.log(`Cursor Cloud heal succeeded on attempt ${attempt}`);
+        return;
+      } catch (healError) {
+        lastError = healError instanceof Error ? healError.message : String(healError);
+        if (attempt === HEAL_ATTEMPTS) {
+          throw new Error(`Cursor Cloud heal failed after ${HEAL_ATTEMPTS} attempt(s): ${lastError}`);
         }
-
-        let lastError = "";
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          const { answer, runId } = await askCloud(agent, actionPrompt(step, digest, ctx, lastError));
-          testInfo?.annotations.push({
-            type: "cursor-cloud",
-            description: `step ${step.index} attempt ${attempt} ${runId || ""}`,
-          });
-          const code = extractPlaywrightCode(answer);
-          if (!code) {
-            lastError = `No executable Playwright in reply: ${answer.slice(0, 240)}`;
-            if (attempt === 3) throw new Error(lastError);
-            continue;
-          }
-          try {
-            await runPlaywright(page, ctx, code);
-            return;
-          } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
-            if (attempt === 3) throw error;
-          }
-        }
-      });
+      }
     }
-  } finally {
-    agent.close();
   }
 }
