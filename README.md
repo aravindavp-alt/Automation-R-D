@@ -1,6 +1,6 @@
 # Automation-R-D
 
-NLP browser tests. Cursor Cloud is called **once** (cheap model `composer-2.5`) to write Playwright. Pass/fail is judged **locally** in Playwright — case id, subject, Site ID, severity, product — with **no extra Cloud tokens**. If the script fails, cookies/storage are cleared, the start URL is reopened, and Cloud heals **once** with a complete `page.goto` script (not a mid-flow snippet).
+NLP browser tests. Cursor Cloud is a **no-repo** agent: it does not clone this repository, so it cannot copy `wolken.ts` or other helpers. It is called **once** (`composer-2.5`) with the NLP steps and returns Playwright. Pass/fail is judged **locally** (case id, subject, Site ID, severity, product). If the script fails, the browser is reset and Cloud heals **once** from NLP plus the error — still with an empty workspace.
 
 ## Create Broadcom Standard case
 
@@ -16,6 +16,8 @@ Add or change English steps in that file. The next run asks Cursor Cloud to inte
    - `WOLKEN_PASSWORD`
    - `CURSOR_API_KEY` — from [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations)
 3. **Actions → Wolken NLP browser → Run workflow**
+
+Use a user or unrestricted service-account `CURSOR_API_KEY` (repository-scoped keys cannot start no-repo Cloud agents).
 
 Pull requests only split/parse the NLP file. The headed Chromium run is `workflow_dispatch` or push to `main`.
 

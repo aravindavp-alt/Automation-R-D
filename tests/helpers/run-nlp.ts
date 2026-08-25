@@ -50,8 +50,9 @@ async function compactDigest(page: Page): Promise<string> {
 
 function generatePrompt(nlp: string, ctx: RunContext): string {
   return [
-    "Playwright for all NLP steps. page, expect, ctx only. One js fence.",
-    "Complete script starting with await page.goto. No comments. No pass/fail verdict.",
+    "Empty workspace. Do not read files. Do not copy helpers or locators.",
+    "Write Playwright only from the NLP steps. page, expect, ctx exist. One js fence.",
+    "Complete script starting with await page.goto. No comments. No verdict.",
     `ctx.subject=${ctx.subject}`,
     "Use getByRole/getByLabel/getByText.",
     nlp,
@@ -60,10 +61,10 @@ function generatePrompt(nlp: string, ctx: RunContext): string {
 
 function healPrompt(nlp: string, digest: string, failedCode: string, failure: string, startUrl: string): string {
   return [
-    "Rewrite a COMPLETE Playwright script. First line must be await page.goto.",
+    "Empty workspace. Do not read files. Rewrite a COMPLETE Playwright script from NLP.",
+    "First statement must be await page.goto. page, expect, ctx only. One js fence.",
     `Start URL: ${startUrl}`,
     "Browser was reset. Ignore leftover UI. Login then finish every NLP step.",
-    "One js fence. No comments. No verdict.",
     `FAIL: ${failure.slice(0, 160)}`,
     `Was at: ${digest.slice(0, 220)}`,
     nlp.slice(0, 700),
@@ -79,13 +80,16 @@ async function runPlaywright(page: Page, ctx: RunContext, code: string): Promise
 }
 
 async function requestCode(prompt: string, testInfo: TestInfo | undefined, label: string): Promise<string> {
-  const { answer, runId } = await promptCloud(prompt);
-  testInfo?.annotations.push({ type: "cursor-cloud", description: `${label} ${runId || ""}` });
+  const { answer, runId, model } = await promptCloud(prompt);
+  console.log(`[nlp] Cursor Cloud no-repo ${label} model=${model} run=${runId || "none"}`);
+  testInfo?.annotations.push({ type: "cursor-cloud", description: `no-repo ${label} ${model} ${runId || ""}` });
   const code = extractPlaywrightCode(answer);
   if (!code) {
     throw new Error(`Cursor Cloud returned no Playwright (${label}): ${answer.slice(0, 180)}`);
   }
-  return requireGoto(code, label);
+  const script = requireGoto(code, label);
+  await testInfo?.attach(`${label}.js`, { body: script, contentType: "text/javascript" });
+  return script;
 }
 
 async function resetBrowser(page: Page, startUrl: string): Promise<void> {

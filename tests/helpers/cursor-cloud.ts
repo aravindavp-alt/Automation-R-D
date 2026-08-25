@@ -14,12 +14,6 @@ function requireApiKey(): string {
   return apiKey;
 }
 
-function cloudRepos(): { url: string; startingRef?: string }[] {
-  const url = String(process.env.CURSOR_CLOUD_REPO || "https://github.com/aravindavp-alt/Automation-R-D.git").trim();
-  const startingRef = String(process.env.CURSOR_CLOUD_REF || "main").trim();
-  return url ? [{ url, startingRef }] : [];
-}
-
 export async function promptCloud(prompt: string): Promise<CloudReply> {
   const apiKey = requireApiKey();
   const model = String(process.env.CURSOR_CLOUD_MODEL || "composer-2.5").trim() || "composer-2.5";
@@ -28,7 +22,7 @@ export async function promptCloud(prompt: string): Promise<CloudReply> {
       apiKey,
       model: { id: model },
       cloud: {
-        repos: cloudRepos(),
+        repos: [],
         skipReviewerRequest: true,
       },
     });
