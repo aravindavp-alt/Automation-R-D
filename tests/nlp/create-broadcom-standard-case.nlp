@@ -1,0 +1,23 @@
+Test Case Title:
+Create Broadcom Standard case in Wolken sandbox
+
+Steps:
+1. Navigate to https://sandbox1-broadcomcms-software-agent.wolkenservicedesk.com/wolken/internal-login
+2. Login with username as "${WOLKEN_USER}" and password as "${WOLKEN_PASSWORD}" if screen is in login screen, else refresh browser
+3. Click create case
+4. Click case type
+5. Click Broadcom Standard
+6. Choose:
+SiteID: 222284
+Contact Name: christian.lehmann@controlware.de
+Product: VMware vSAN (VMware vSAN)
+Release: 8.0U2c
+Severity: High - P2
+Component: vSAN (OSA) (vSAN OSA)
+Responsible ORG: Support
+7. Enter Subject and Description
+8. Take screenshot and paste in Description
+9. Submit
+
+Expected Result:
+A Broadcom Standard case is created with High - P2 severity and appears on the home case list.
