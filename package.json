@@ -1,0 +1,13 @@
+{
+  "name": "automation-r-d",
+  "private": true,
+  "description": "NLP browser tests for Wolken sandbox, executed in CI with Playwright",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "dotenv": "^16.4.7"
+  }
+}
