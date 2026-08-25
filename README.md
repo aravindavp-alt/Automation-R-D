@@ -1,6 +1,6 @@
 # Automation-R-D
 
-NLP browser tests. The `.nlp` file is the source of truth. Cursor Cloud is called **once** to turn the whole case into Playwright, then that script runs in the browser. A failed run gets **at most one heal** (`CURSOR_HEAL_ATTEMPTS`, default 1) with a short page digest. No per-step Cloud calls.
+NLP browser tests. Cursor Cloud is called **once** (cheap model `composer-2.5`) to write Playwright. Pass/fail is judged **locally** in Playwright — case id, subject, Site ID, severity, product — with **no extra Cloud tokens**. If the script fails, cookies/storage are cleared, the start URL is reopened, and Cloud heals **once** with a complete `page.goto` script (not a mid-flow snippet).
 
 ## Create Broadcom Standard case
 
@@ -18,6 +18,8 @@ Add or change English steps in that file. The next run asks Cursor Cloud to inte
 3. **Actions → Wolken NLP browser → Run workflow**
 
 Pull requests only split/parse the NLP file. The headed Chromium run is `workflow_dispatch` or push to `main`.
+
+CI uses Node 24 via `actions/checkout@v7`, `actions/setup-node@v7`, and `actions/upload-artifact@v7`. npm cache is off so GitHub does not pull the deprecated Node 20 cache action.
 
 ## Local
 

@@ -62,7 +62,7 @@ export function extractPlaywrightCode(answer: string): string {
     })
     .join("\n")
     .trim();
-  if (!/await\s+page|page\.(goto|locator|getBy|waitFor)/.test(raw)) {
+  if (!/await\s+page|page\.(goto|locator|getBy|waitFor)|expect\(page/.test(raw)) {
     return "";
   }
   return raw;
