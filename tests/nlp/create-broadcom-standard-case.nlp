@@ -18,6 +18,7 @@ Responsible ORG: Support
 7. Enter Subject and Description
 8. Take screenshot and paste in Description
 9. Submit
+10. Wait for Summary and check whether all form details displayed 
 
 Expected Result:
 A Broadcom Standard case is created with High - P2 severity and appears on the home case list.

@@ -20,7 +20,8 @@ export type NlpStep =
   | { kind: "choose"; fields: ChooseFields; raw: string }
   | { kind: "enterSubjectDescription"; raw: string }
   | { kind: "pasteScreenshot"; raw: string }
-  | { kind: "submit"; raw: string };
+  | { kind: "submit"; raw: string }
+  | { kind: "waitForSummary"; raw: string };
 
 const FIELD_ALIASES: Record<string, keyof ChooseFields> = {
   siteid: "siteId",
@@ -104,6 +105,10 @@ export function loadNlp(filePath: string, env: NodeJS.ProcessEnv = process.env):
     }
     if (/^submit$/i.test(firstLine)) {
       steps.push({ kind: "submit", raw });
+      continue;
+    }
+    if (/^wait for summary/i.test(firstLine)) {
+      steps.push({ kind: "waitForSummary", raw });
       continue;
     }
     throw new Error(`Unsupported NLP step: ${firstLine}`);

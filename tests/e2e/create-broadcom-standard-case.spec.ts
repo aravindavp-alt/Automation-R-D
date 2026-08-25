@@ -20,6 +20,7 @@ test("NLP file parses into browser steps", () => {
     "enterSubjectDescription",
     "pasteScreenshot",
     "submit",
+    "waitForSummary",
   ]);
   const choose = steps.find((step) => step.kind === "choose");
   if (choose?.kind !== "choose") throw new Error("missing choose step");
@@ -41,6 +42,7 @@ test("NLP: create Broadcom Standard case in a real browser", async ({ page }) =>
     subject: `vSAN OSA cluster health issue on 8.0U2c [${stamp}]`,
     description:
       "Customer reports a vSAN OSA cluster health issue on release 8.0U2c. Please investigate High-P2 impact. Screenshot of the case form is pasted below.",
+    fields: {},
   };
 
   for (const step of steps) {

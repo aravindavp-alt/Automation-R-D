@@ -4,6 +4,7 @@ import type { ChooseFields, NlpStep } from "./nlp";
 export type RunContext = {
   subject: string;
   description: string;
+  fields: ChooseFields;
 };
 
 async function visibleLoginForm(page: Page): Promise<boolean> {
@@ -144,6 +145,31 @@ async function submitAndAssert(page: Page, subject: string): Promise<void> {
   }
 }
 
+function summaryValues(ctx: RunContext): string[] {
+  const product = ctx.fields.product ? productSearchName(ctx.fields.product) : "";
+  const contact = ctx.fields.contactName?.includes("@")
+    ? ctx.fields.contactName.split("@")[0].split(".").pop() || ctx.fields.contactName
+    : ctx.fields.contactName;
+  return [
+    ctx.subject,
+    ctx.fields.siteId,
+    contact,
+    product,
+    ctx.fields.release,
+    ctx.fields.severity,
+    ctx.fields.component,
+    ctx.fields.responsibleOrg,
+  ].filter((value): value is string => Boolean(value));
+}
+
+async function waitForSummary(page: Page, ctx: RunContext): Promise<void> {
+  const body = page.locator("body");
+  await expect(body).toContainText(/summary|case id|\d{8}/i, { timeout: 90_000 });
+  for (const value of summaryValues(ctx)) {
+    await expect(body).toContainText(value, { timeout: 20_000 });
+  }
+}
+
 export async function executeStep(page: Page, step: NlpStep, ctx: RunContext): Promise<void> {
   switch (step.kind) {
     case "navigate":
@@ -175,6 +201,7 @@ export async function executeStep(page: Page, step: NlpStep, ctx: RunContext): P
       await page.locator("#SiteId").waitFor({ state: "visible", timeout: 30_000 });
       return;
     case "choose":
+      Object.assign(ctx.fields, step.fields);
       await chooseFields(page, step.fields);
       return;
     case "enterSubjectDescription":
@@ -185,6 +212,9 @@ export async function executeStep(page: Page, step: NlpStep, ctx: RunContext): P
       return;
     case "submit":
       await submitAndAssert(page, ctx.subject);
+      return;
+    case "waitForSummary":
+      await waitForSummary(page, ctx);
       return;
   }
 }
