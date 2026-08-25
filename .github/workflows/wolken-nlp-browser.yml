@@ -30,25 +30,26 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium
-      - run: npx playwright test --grep "parses"
+      - run: npx playwright test --grep "splits"
 
   create-case:
     name: Execute NLP in Chromium
     needs: nlp-parse
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Require Wolken secrets
+      - name: Require secrets
         env:
           WOLKEN_USER: ${{ secrets.WOLKEN_USER }}
           WOLKEN_PASSWORD: ${{ secrets.WOLKEN_PASSWORD }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
         run: |
-          if [ -z "$WOLKEN_USER" ] || [ -z "$WOLKEN_PASSWORD" ]; then
-            echo "Add repository secrets WOLKEN_USER and WOLKEN_PASSWORD (Settings → Secrets and variables → Actions)."
+          if [ -z "$WOLKEN_USER" ] || [ -z "$WOLKEN_PASSWORD" ] || [ -z "$CURSOR_API_KEY" ]; then
+            echo "Add repository secrets WOLKEN_USER, WOLKEN_PASSWORD, and CURSOR_API_KEY."
             exit 1
           fi
 
@@ -70,7 +71,11 @@ jobs:
           HEADED: "true"
           WOLKEN_USER: ${{ secrets.WOLKEN_USER }}
           WOLKEN_PASSWORD: ${{ secrets.WOLKEN_PASSWORD }}
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1400x900x24" npx playwright test --headed --grep-invert "parses"
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          CURSOR_CLOUD_MODEL: ${{ vars.CURSOR_CLOUD_MODEL }}
+          CURSOR_CLOUD_REPO: https://github.com/${{ github.repository }}.git
+          CURSOR_CLOUD_REF: ${{ github.sha }}
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1400x900x24" npx playwright test --headed --grep-invert "splits"
 
       - name: Upload Playwright report
         if: always()

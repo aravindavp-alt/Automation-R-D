@@ -7,7 +7,7 @@ const headed = process.env.HEADED === "true" || process.argv.includes("--headed"
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 4 * 60 * 1000,
+  timeout: 20 * 60 * 1000,
   expect: { timeout: 20_000 },
   fullyParallel: false,
   workers: 1,
