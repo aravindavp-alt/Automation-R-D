@@ -5,6 +5,9 @@ const emailError = document.querySelector('#email-error');
 const passwordError = document.querySelector('#password-error');
 const formStatus = document.querySelector('#form-status');
 const toggle = document.querySelector('.password-toggle');
+const loginView = document.querySelector('.page-shell');
+const dashboard = document.querySelector('#dashboard');
+const logoutButton = document.querySelector('#logout-button');
 
 function validateForm() {
   let isValid = true;
@@ -36,7 +39,18 @@ toggle.addEventListener('click', () => {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   if (!validateForm()) return;
-  formStatus.textContent = 'Details look good. Connecting you now...';
+  loginView.hidden = true;
+  dashboard.hidden = false;
+  document.title = 'Northstar | Dashboard';
+  dashboard.querySelector('#dashboard-title').focus();
+});
+
+logoutButton.addEventListener('click', () => {
+  dashboard.hidden = true;
+  loginView.hidden = false;
+  document.title = 'Northstar | Sign in';
+  password.value = '';
+  email.focus();
 });
 
 [email, password].forEach((field) => {
