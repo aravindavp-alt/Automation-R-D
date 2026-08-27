@@ -19,138 +19,124 @@ function fieldLines(raw: string): Array<{ label: string; value: string }> {
     .map((match) => ({ label: match[1].trim(), value: match[2].trim() }));
 }
 
-async function visible(page: Page, selector: string): Promise<boolean> {
-  return page.locator(selector).first().isVisible().catch(() => false);
+function createCaseButton(page: Page) {
+  return page.getByRole("button", { name: /create\s*case/i }).or(page.locator("button.new-case"));
 }
 
 async function clickByName(page: Page, name: string): Promise<void> {
   const re = new RegExp(escapeRe(name).replace(/\s+/g, "\\s+"), "i");
-  const locators = [
-    page.getByRole("button", { name: re }),
-    page.getByRole("link", { name: re }),
-    page.getByRole("menuitem", { name: re }),
-    page.getByRole("tab", { name: re }),
-    page.getByRole("option", { name: re }),
-    page.getByText(re, { exact: false }),
-  ];
-  for (const locator of locators) {
-    const first = locator.first();
-    if (await first.isVisible().catch(() => false)) {
-      await first.click();
-      return;
-    }
-  }
-  throw new Error(`Local Playwright could not click "${name}"`);
+  const target = page
+    .getByRole("button", { name: re })
+    .or(page.getByRole("link", { name: re }))
+    .or(page.getByRole("menuitem", { name: re }))
+    .or(page.getByRole("tab", { name: re }))
+    .or(page.getByRole("option", { name: re }))
+    .or(page.getByText(re, { exact: false }));
+  await target.first().click({ timeout: 20_000 });
+}
+
+async function waitForDashboard(page: Page, timeout = 45_000): Promise<void> {
+  await createCaseButton(page).first().waitFor({ state: "visible", timeout });
 }
 
 async function loginIfNeeded(page: Page, user: string, password: string): Promise<void> {
-  const passwordBox = page.locator('input[type="password"]').first();
-  if (!(await passwordBox.isVisible().catch(() => false))) {
+  const email = page.getByRole("textbox", { name: /email/i });
+  const passwordBox = page.getByRole("textbox", { name: /password/i });
+  const loginBtn = page.getByRole("button", { name: /^login$/i });
+
+  await Promise.race([
+    email.first().waitFor({ state: "visible", timeout: 20_000 }),
+    createCaseButton(page).first().waitFor({ state: "visible", timeout: 20_000 }),
+  ]).catch(() => undefined);
+
+  if (await createCaseButton(page).first().isVisible().catch(() => false)) {
     await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForDashboard(page);
     return;
   }
-  const userBox = page.locator('input[type="email"], input[formcontrolname="username"], input[type="text"], input').first();
-  await userBox.fill(user);
-  await passwordBox.fill(password);
-  const submit = page.getByRole("button", { name: /sign in|log in|login/i }).first();
-  if (await submit.isVisible().catch(() => false)) {
-    await submit.click();
-  } else {
-    await passwordBox.press("Enter");
+
+  if (!(await email.first().isVisible().catch(() => false))) {
+    throw new Error("Local Playwright: login form did not appear");
   }
-  await page.locator('input[type="password"]').first().waitFor({ state: "hidden", timeout: 30_000 }).catch(() => undefined);
+
+  await email.first().fill(user);
+  await passwordBox.first().fill(password);
+  await loginBtn.first().click({ timeout: 10_000 });
+  await waitForDashboard(page);
 }
 
 async function pickOption(page: Page, value: string): Promise<boolean> {
   const short = value.replace(/\s*\([^)]*\)\s*$/, "").trim();
   const re = new RegExp(escapeRe(short).replace(/\s+/g, "\\s+"), "i");
   const option = page.getByRole("option", { name: re }).first();
-  if (await option.isVisible().catch(() => false)) {
-    await option.click();
+  try {
+    await option.click({ timeout: 4_000 });
     return true;
+  } catch {
+    const text = page.getByText(re).last();
+    try {
+      await text.click({ timeout: 2_000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
-  const text = page.getByText(re).last();
-  if (await text.isVisible().catch(() => false)) {
-    await text.click();
-    return true;
-  }
-  return false;
 }
 
 async function setLabeledField(page: Page, label: string, value: string): Promise<void> {
   const labelRe = new RegExp(escapeRe(label).replace(/\s+/g, "\\s+"), "i");
+  const byId = page.locator(`[id="${label}"], [id="${label} "]`).first();
   const field = page.locator("mat-form-field, .mat-mdc-form-field, .mat-form-field").filter({ hasText: labelRe }).first();
-  if (await field.count()) {
-    await field.click();
-    const input = field.locator("input, textarea, [contenteditable='true']").first();
-    if (await input.count()) {
-      await input.fill("");
-      await input.type(value, { delay: 20 });
-    } else {
-      await page.keyboard.type(value, { delay: 20 });
-    }
-    if (await pickOption(page, value)) return;
-    await page.keyboard.press("Enter").catch(() => undefined);
-    await page.keyboard.press("Tab").catch(() => undefined);
-    return;
-  }
-
   const byLabel = page.getByLabel(labelRe).first();
-  if (await byLabel.count()) {
-    await byLabel.click();
-    await byLabel.fill(value);
-    if (await pickOption(page, value)) return;
-    await page.keyboard.press("Enter").catch(() => undefined);
-    return;
+
+  const control = (await byId.count()) ? byId : (await field.count()) ? field : byLabel;
+  if (!(await control.count())) {
+    throw new Error(`Local Playwright could not set "${label}"`);
   }
 
-  throw new Error(`Local Playwright could not set "${label}"`);
+  await control.click({ timeout: 10_000 });
+  const input = control.locator("input, textarea, [contenteditable='true']").first();
+  if (await input.count()) {
+    await input.fill("");
+    await input.type(value, { delay: 20 });
+  } else {
+    await page.keyboard.type(value, { delay: 20 });
+  }
+  if (await pickOption(page, value)) return;
+  await page.keyboard.press("Enter").catch(() => undefined);
+  await page.keyboard.press("Tab").catch(() => undefined);
 }
 
 async function fillSubjectAndDescription(page: Page, ctx: RunContext): Promise<void> {
-  const subject = page.getByLabel(/subject/i).first();
-  if (await subject.count()) {
-    await subject.fill(ctx.subject);
-  } else {
-    await setLabeledField(page, "Subject", ctx.subject);
-  }
+  const subject = page.locator('[id="Subject"], [id="Subject "]').or(page.getByLabel(/subject/i)).first();
+  await subject.click({ timeout: 10_000 });
+  await subject.fill(ctx.subject);
 
-  const description = page.getByLabel(/description/i).first();
-  if (await description.count()) {
-    await description.click();
-    await description.fill(ctx.description);
-  } else {
-    await setLabeledField(page, "Description", ctx.description);
-  }
+  const description = page.locator('[id="Description"], [id="Description "]').or(page.getByLabel(/description/i)).first();
+  await description.click({ timeout: 10_000 });
+  await description.fill(ctx.description);
 }
 
 async function pasteScreenshot(page: Page): Promise<void> {
   const png = await page.screenshot({ type: "png" });
-  await page.evaluate(async (b64) => {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: "image/png" });
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-  }, png.toString("base64")).catch(() => undefined);
+  await page
+    .evaluate(async (b64) => {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "image/png" });
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    }, png.toString("base64"))
+    .catch(() => undefined);
 
-  const description = page.getByLabel(/description/i).first();
+  const description = page.locator('[id="Description"], [id="Description "]').or(page.getByLabel(/description/i)).first();
   if (await description.count()) await description.click();
-  const paste = process.platform === "darwin" ? "Meta+v" : "Control+v";
-  await page.keyboard.press(paste).catch(() => undefined);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+v" : "Control+v").catch(() => undefined);
 }
 
 async function submitCase(page: Page): Promise<void> {
-  const submit = page.getByRole("button", { name: /submit/i }).first();
-  if (await submit.isVisible().catch(() => false)) {
-    await submit.click();
-    return;
-  }
-  if (await visible(page, "#createSubmitBtn")) {
-    await page.locator("#createSubmitBtn").click();
-    return;
-  }
-  throw new Error("Local Playwright could not find Submit");
+  const submit = page.getByRole("button", { name: /submit/i }).or(page.locator("#createSubmitBtn")).first();
+  await submit.click({ timeout: 15_000 });
 }
 
 export async function runNlpWithLocalPlaywright(page: Page, nlp: NlpCase, ctx: RunContext): Promise<void> {
@@ -164,6 +150,10 @@ export async function runNlpWithLocalPlaywright(page: Page, nlp: NlpCase, ctx: R
 
     if (/^navigate to /i.test(text)) {
       await page.goto(nlp.startUrl || text.replace(/^navigate to /i, "").trim(), { waitUntil: "domcontentloaded" });
+      await Promise.race([
+        page.getByRole("textbox", { name: /email/i }).first().waitFor({ state: "visible", timeout: 30_000 }),
+        createCaseButton(page).first().waitFor({ state: "visible", timeout: 30_000 }),
+      ]);
       continue;
     }
 
@@ -173,7 +163,11 @@ export async function runNlpWithLocalPlaywright(page: Page, nlp: NlpCase, ctx: R
     }
 
     if (/^click /i.test(text)) {
-      await clickByName(page, text.replace(/^click /i, "").trim());
+      const name = text.replace(/^click /i, "").trim();
+      await clickByName(page, name);
+      if (/create\s*case/i.test(name)) {
+        await page.getByText(/case type|broadcom standard/i).first().waitFor({ timeout: 20_000 });
+      }
       continue;
     }
 

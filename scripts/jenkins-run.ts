@@ -1,6 +1,7 @@
-import { chromium } from "@playwright/test";
+import { chromium, type Browser } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
-import { loadNlpCase, nlpPath } from "../tests/helpers/nlp";
+import path from "node:path";
+import { loadNlpCase, resolveNlpFiles, runContextFor } from "../tests/helpers/nlp";
 import { runNlpCase } from "../tests/helpers/run-nlp";
 
 loadEnv();
@@ -11,7 +12,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function launchBrowser() {
+async function launchBrowser(): Promise<Browser> {
   const headed = process.env.HEADED !== "false";
   const common = {
     headless: !headed,
@@ -24,52 +25,68 @@ async function launchBrowser() {
   }
 }
 
+async function closeBrowser(browser: Browser): Promise<void> {
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise((resolve) => setTimeout(resolve, 5_000).unref()),
+    ]);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function main(): Promise<void> {
   requireEnv("WOLKEN_USER");
   requireEnv("WOLKEN_PASSWORD");
 
-  const filePath = process.env.NLP_FILE || nlpPath("create-broadcom-standard-case.nlp");
-  const nlp = loadNlpCase(filePath);
-  if (!nlp.steps.length) throw new Error(`No NLP steps in ${filePath}`);
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const ctx = {
-    subject: process.env.NLP_SUBJECT || `vSAN OSA cluster health issue on 8.0U2c [${stamp}]`,
-    description:
-      process.env.NLP_DESCRIPTION ||
-      "Customer reports a vSAN OSA cluster health issue on release 8.0U2c. Please investigate High-P2 impact.",
-  };
-
+  const files = resolveNlpFiles();
   const heal = String(process.env.CURSOR_HEAL_WITH || "mcp").trim().toLowerCase();
   const headed = process.env.HEADED !== "false";
   console.log(
-    `[jenkins] NLP ${filePath} steps=${nlp.steps.length} local Playwright first heal=${heal} headed=${headed} (LLM only on failure)`,
+    `[jenkins] scenarios=${files.length} heal=${heal} headed=${headed} (local Playwright first, LLM only on failure)`,
   );
+  for (const file of files) {
+    console.log(`[jenkins] queued ${path.relative(process.env.NLP_ROOT || process.cwd(), file)}`);
+  }
 
   const browser = await launchBrowser();
-  const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  const page = await context.newPage();
-  let exitCode = 0;
+  const failed: string[] = [];
   try {
-    await runNlpCase(page, nlp, ctx);
-    console.log("[jenkins] PASS");
-  } catch (error) {
-    console.error(`[jenkins] ${error instanceof Error ? error.message : String(error)}`);
-    exitCode = 2;
-  } finally {
-    console.log("[jenkins] closing local Playwright browser");
-    try {
-      await Promise.race([
-        browser.close(),
-        new Promise((resolve) => setTimeout(resolve, 5_000).unref()),
-      ]);
-    } catch {
-      /* ignore */
+    for (const filePath of files) {
+      const nlp = loadNlpCase(filePath);
+      if (!nlp.steps.length) throw new Error(`No NLP steps in ${filePath}`);
+      const env = files.length === 1 ? process.env : { ...process.env, NLP_SUBJECT: "", NLP_DESCRIPTION: "" };
+      const ctx = runContextFor(nlp, env);
+      const label = nlp.title || path.basename(filePath);
+      console.log(`[jenkins] START ${label} steps=${nlp.steps.length} file=${filePath}`);
+
+      const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      const page = await context.newPage();
+      try {
+        await runNlpCase(page, nlp, ctx);
+        console.log(`[jenkins] PASS ${label}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[jenkins] FAIL ${label}: ${message}`);
+        failed.push(`${label}: ${message}`);
+      } finally {
+        await context.close().catch(() => undefined);
+      }
     }
+  } finally {
+    console.log("[jenkins] closing browser");
+    await closeBrowser(browser);
   }
-  console.log(`[jenkins] exiting ${exitCode === 0 ? "SUCCESS" : "FAILURE"}`);
-  process.exit(exitCode);
+
+  if (failed.length) {
+    console.error(`[jenkins] ${files.length - failed.length} passed, ${failed.length} failed`);
+    for (const item of failed) console.error(`[jenkins]  - ${item}`);
+    process.exit(2);
+  }
+  console.log(`[jenkins] PASS all ${files.length} scenario(s)`);
+  process.exit(0);
 }
 
 main().catch((error) => {

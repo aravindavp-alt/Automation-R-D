@@ -1,12 +1,34 @@
 # Automation-R-D
 
-NLP browser tests. The cheap path is **local Playwright** (no LLM tokens): it walks the `.nlp` steps with role/label/text locators and a local judge (case id, subject, Site ID, severity, product). **LLMs run only on failure.** Jenkins heals with a local Cursor agent + Playwright MCP + Chrome DevTools MCP. GitHub Actions heals with a no-repo Cursor Cloud rewrite of a Playwright script.
+NLP browser tests. Drop one `.nlp` file per scenario in [`tests/nlp/`](tests/nlp/). The cheap path is **local Playwright** (no LLM tokens). **LLMs run only on failure.** Jenkins heals with a local Cursor agent + Playwright MCP. GitHub Actions heals with a no-repo Cursor Cloud rewrite.
 
-## Create Broadcom Standard case
+## NLP scenarios
 
-Test: [`tests/nlp/create-broadcom-standard-case.nlp`](tests/nlp/create-broadcom-standard-case.nlp)
+Each file in `tests/nlp/*.nlp` is one scenario. Playwright and Jenkins discover them automatically.
 
-Add or change English steps in that file. The next run interprets them with local Playwright. Cursor is called only if that run fails.
+```text
+Test Case Title:
+Create Broadcom Standard case in Wolken sandbox
+Subject: optional override
+Description: optional override
+
+Steps:
+1. Navigate to https://...
+2. ...
+
+Expected Result:
+...
+```
+
+`Subject` / `Description` are optional. If omitted, the runner uses the title plus a timestamp.
+
+Run a subset:
+
+```bash
+NLP_FILE=tests/nlp/create-broadcom-standard-case.nlp npm run jenkins:nlp
+NLP_FILE='tests/nlp/*.nlp' npm run jenkins:nlp
+NLP_FILE='tests/nlp/foo.nlp,tests/nlp/bar.nlp' npm run jenkins:nlp
+```
 
 ## GitHub Actions (CI)
 
@@ -15,20 +37,20 @@ Add or change English steps in that file. The next run interprets them with loca
    - `WOLKEN_USER`
    - `WOLKEN_PASSWORD`
    - `CURSOR_API_KEY` — from [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations) (used only if local Playwright fails)
-3. **Actions → Wolken NLP browser → Run workflow**
+3. **Actions → Wolken NLP browser → Run workflow** (optional `nlp_file` input)
 
 Use a user or unrestricted service-account `CURSOR_API_KEY` (repository-scoped keys cannot start no-repo Cloud agents).
 
-Pull requests only split/parse the NLP file. The headed Chromium run is `workflow_dispatch` or push to `main`.
+Pull requests only split/parse every `.nlp` file. The headed Chromium run is `workflow_dispatch` or push to `main`.
 
 CI uses Node 24 via `actions/checkout@v7`, `actions/setup-node@v7`, and `actions/upload-artifact@v7`. npm cache is off so GitHub does not pull the deprecated Node 20 cache action.
 
 ## Jenkins
 
-Pipeline: [`Jenkinsfile`](Jenkinsfile). It pulls the NLP from a Git repo, then:
+Pipeline: [`Jenkinsfile`](Jenkinsfile). Parameter `NLP_FILE` defaults to `tests/nlp/*.nlp`.
 
-1. **Local headed Chrome + Playwright** runs the NLP (no LLM). Watch the window on this Mac; Jenkins console shows `[local] step N`.
-2. **On failure only**, a local Cursor agent starts **Playwright MCP** + **Chrome DevTools MCP** and finishes the case.
+1. **Local headed Chrome + Playwright** runs each matching NLP (no LLM).
+2. **On failure only**, a local Cursor agent starts **Playwright MCP** + **Chrome DevTools MCP**.
 
 Jenkins credentials:
 
@@ -36,11 +58,7 @@ Jenkins credentials:
 - `cursor-api-key` — used only if local Playwright fails
 - `wolken-login` — Wolken username/password
 
-`HEADED=true` (default) shows Chrome. `CURSOR_HEAL_WITH=mcp` (default) is the failure path. There is no `xvfb-run` on this Mac; that wrapper is Linux-only.
-
-```bash
-NLP_FILE=tests/nlp/create-broadcom-standard-case.nlp npm run jenkins:nlp
-```
+`HEADED=true` (default) shows Chrome. `CURSOR_HEAL_WITH=mcp` (default) is the failure path.
 
 ## Local
 

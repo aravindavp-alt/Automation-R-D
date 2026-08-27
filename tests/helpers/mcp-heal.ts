@@ -40,6 +40,7 @@ function mcpServers() {
 
 function healPrompt(nlp: NlpCase, subject: string, description: string, failure: string): string {
   return [
+    `Scenario: ${nlp.title}`,
     "The cheap local Playwright run failed. Finish this NLP case in the already-visible Chrome.",
     "Use Playwright MCP (snapshot, click, type). Use Chrome DevTools MCP only if a locator is unclear.",
     "Do not clone repos. Do not read workspace files. Do not copy helpers.",
@@ -75,13 +76,14 @@ export function judgeAgentVerdict(nlp: NlpCase, subject: string, verdict: AgentV
   if (verdict.status !== "PASS") {
     throw new Error(`Agent FAIL: ${verdict.notes || "no notes"}`);
   }
-  if (!verdict.caseId || !/^\d{8}$/.test(verdict.caseId)) {
+  const createCase = /create.*case|case is created|summary page/i.test(`${nlp.title}\n${nlp.expected}`);
+  if (createCase && (!verdict.caseId || !/^\d{8}$/.test(verdict.caseId))) {
     throw new Error(`Local judge: missing 8-digit case id (got ${verdict.caseId || "empty"})`);
   }
-  if (!verdict.subject || !verdict.subject.includes(subject.slice(0, 24))) {
+  if (createCase && subject && (!verdict.subject || !verdict.subject.includes(subject.slice(0, 24)))) {
     throw new Error(`Local judge: subject mismatch (got ${verdict.subject || "empty"})`);
   }
-  const severity = nlp.facts.find((fact) => /p[1-4]/i.test(fact));
+  const severity = nlp.fields.Severity || nlp.facts.find((fact) => /p[1-4]/i.test(fact));
   if (severity && verdict.notes && !new RegExp(severity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(`${verdict.subject} ${verdict.notes}`)) {
     console.warn(`[llm] severity ${severity} not echoed in verdict notes`);
   }

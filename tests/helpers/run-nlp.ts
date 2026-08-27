@@ -116,7 +116,7 @@ export async function runNlpCase(
   testInfo?: TestInfo,
 ): Promise<void> {
   try {
-    console.log("[nlp] local Playwright (no LLM)");
+    console.log(`[nlp] ${nlp.title} local Playwright (no LLM)`);
     await runNlpWithLocalPlaywright(page, nlp, ctx);
     await judgeLocally(page, nlp, ctx);
     console.log("[nlp] PASS local Playwright");

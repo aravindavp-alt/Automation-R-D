@@ -3,15 +3,15 @@ pipeline {
 
   options {
     timestamps()
-    timeout(time: 40, unit: 'MINUTES')
+    timeout(time: 90, unit: 'MINUTES')
     disableConcurrentBuilds()
   }
 
   parameters {
     string(name: 'RUNNER_DIR', defaultValue: '/Users/wspl-0318/Desktop/Wolken_QC_Automation/CURSOR-RD/Automation-R-D', description: 'Local runner project (used when this job is an inline Pipeline script)')
-    string(name: 'NLP_REPO', defaultValue: 'https://github.com/aravindavp-alt/Automation-R-D.git', description: 'Git repository that contains the .nlp file')
+    string(name: 'NLP_REPO', defaultValue: 'https://github.com/aravindavp-alt/Automation-R-D.git', description: 'Git repository that contains the .nlp files')
     string(name: 'NLP_REF', defaultValue: 'feat/wolken-nlp-ci', description: 'Branch, tag, or commit of the NLP repository')
-    string(name: 'NLP_FILE', defaultValue: 'tests/nlp/create-broadcom-standard-case.nlp', description: 'Path to the NLP case inside the NLP repository')
+    string(name: 'NLP_FILE', defaultValue: 'tests/nlp/*.nlp', description: 'One path, comma-separated paths, glob, or all')
     string(name: 'NLP_GIT_CREDENTIALS', defaultValue: '', description: 'Optional Jenkins credentials id for a private NLP repo')
     choice(name: 'HEADED', choices: ['true', 'false'], description: 'true = visible Chrome on this Mac. false = headless (Linux Xvfb if present)')
     choice(name: 'CURSOR_HEAL_WITH', choices: ['mcp', 'cloud'], description: 'LLM heal only if local Playwright fails. mcp = local Cursor + Playwright MCP. cloud = Cursor Cloud script rewrite')
@@ -23,6 +23,7 @@ pipeline {
     RUNNER_DIR = "${params.RUNNER_DIR}"
     NLP_REPO = "${params.NLP_REPO}"
     NLP_REF = "${params.NLP_REF}"
+    NLP_FILE = "${params.NLP_FILE}"
     HEADED = "${params.HEADED}"
     CURSOR_HEAL_WITH = "${params.CURSOR_HEAL_WITH}"
     CURSOR_CLOUD_MODEL = "${params.CURSOR_CLOUD_MODEL}"
@@ -42,7 +43,7 @@ pipeline {
           rsync -a --exclude node_modules --exclude nlp-src --exclude .git "${RUNNER_DIR}/" "${WORKSPACE}/"
           test -f scripts/jenkins-run.ts
           test -f package.json
-          echo "[jenkins] runner from ${RUNNER_DIR} heal=${CURSOR_HEAL_WITH:-} headed=${HEADED:-}"
+          echo "[jenkins] runner from ${RUNNER_DIR} heal=${CURSOR_HEAL_WITH:-} headed=${HEADED:-} nlp=${NLP_FILE:-}"
         '''
       }
     }
@@ -63,24 +64,20 @@ pipeline {
           }
         }
         script {
-          env.NLP_FILE = "${env.WORKSPACE}/nlp-src/${params.NLP_FILE}"
+          env.NLP_ROOT = "${env.WORKSPACE}/nlp-src"
+          env.NLP_FILE = params.NLP_FILE
         }
-        sh 'test -f "$NLP_FILE"'
+        sh 'test -d "$NLP_ROOT/tests/nlp"'
       }
     }
 
-    stage('Setup Node') {
+    stage('Local Playwright (LLM only on failure)') {
       steps {
         sh '''
           node -v
           npm ci
           npx playwright install chromium
         '''
-      }
-    }
-
-    stage('Local Playwright (LLM only on failure)') {
-      steps {
         withCredentials([
           string(credentialsId: 'cursor-api-key', variable: 'CURSOR_API_KEY'),
           usernamePassword(credentialsId: 'wolken-login', usernameVariable: 'WOLKEN_USER', passwordVariable: 'WOLKEN_PASSWORD')

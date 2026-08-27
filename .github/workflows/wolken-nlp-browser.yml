@@ -2,6 +2,11 @@ name: Wolken NLP browser
 
 on:
   workflow_dispatch:
+    inputs:
+      nlp_file:
+        description: One path, comma-separated paths, glob, or all
+        default: tests/nlp/*.nlp
+        required: false
   push:
     branches: [main]
     paths:
@@ -20,7 +25,7 @@ on:
 
 jobs:
   nlp-parse:
-    name: Parse NLP case
+    name: Parse NLP scenarios
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -32,12 +37,12 @@ jobs:
       - run: npx playwright install chromium
       - run: npx playwright test --grep "splits"
 
-  create-case:
+  execute-nlp:
     name: Execute NLP in Chromium
     needs: nlp-parse
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -65,10 +70,11 @@ jobs:
       - name: Install Chromium
         run: npx playwright install chromium --with-deps
 
-      - name: Run NLP case in a headed browser
+      - name: Run NLP scenarios in a headed browser
         env:
           CI: true
           HEADED: "true"
+          NLP_FILE: ${{ github.event.inputs.nlp_file || 'tests/nlp/*.nlp' }}
           WOLKEN_USER: ${{ secrets.WOLKEN_USER }}
           WOLKEN_PASSWORD: ${{ secrets.WOLKEN_PASSWORD }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
