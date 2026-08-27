@@ -1,6 +1,8 @@
 import { Agent, CursorAgentError } from "@cursor/sdk";
 import type { NlpCase } from "./nlp";
 
+type CursorAgent = Awaited<ReturnType<typeof Agent.create>>;
+
 export type AgentVerdict = {
   status: "PASS" | "FAIL";
   caseId?: string;
@@ -96,8 +98,9 @@ export async function healWithLocalMcp(
   const model = String(process.env.CURSOR_CLOUD_MODEL || "composer-2.5").trim() || "composer-2.5";
 
   console.log(`[llm] starting local Cursor + Playwright MCP model=${model}`);
+  let agent: CursorAgent | undefined;
   try {
-    await using agent = await Agent.create({
+    agent = await Agent.create({
       apiKey,
       model: { id: model },
       mcpServers: mcpServers(),
@@ -122,5 +125,27 @@ export async function healWithLocalMcp(
       throw new Error(`LLM heal did not start: ${error.message}`);
     }
     throw error;
+  } finally {
+    await disposeAgent(agent);
+  }
+}
+
+async function disposeAgent(agent: CursorAgent | undefined): Promise<void> {
+  if (!agent) return;
+  console.log("[llm] disposing Cursor agent and MCP browsers");
+  try {
+    agent.close();
+  } catch {
+    /* close is best-effort */
+  }
+  try {
+    await Promise.race([
+      agent[Symbol.asyncDispose](),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("agent dispose timed out after 8s")), 8_000).unref();
+      }),
+    ]);
+  } catch (error) {
+    console.warn(`[llm] ${error instanceof Error ? error.message : String(error)}`);
   }
 }

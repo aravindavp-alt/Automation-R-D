@@ -50,11 +50,26 @@ async function main(): Promise<void> {
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const page = await context.newPage();
+  let exitCode = 0;
   try {
     await runNlpCase(page, nlp, ctx);
+    console.log("[jenkins] PASS");
+  } catch (error) {
+    console.error(`[jenkins] ${error instanceof Error ? error.message : String(error)}`);
+    exitCode = 2;
   } finally {
-    await browser.close();
+    console.log("[jenkins] closing local Playwright browser");
+    try {
+      await Promise.race([
+        browser.close(),
+        new Promise((resolve) => setTimeout(resolve, 5_000).unref()),
+      ]);
+    } catch {
+      /* ignore */
+    }
   }
+  console.log(`[jenkins] exiting ${exitCode === 0 ? "SUCCESS" : "FAILURE"}`);
+  process.exit(exitCode);
 }
 
 main().catch((error) => {
