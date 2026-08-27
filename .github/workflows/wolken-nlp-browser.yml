@@ -73,6 +73,7 @@ jobs:
           WOLKEN_PASSWORD: ${{ secrets.WOLKEN_PASSWORD }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           CURSOR_CLOUD_MODEL: ${{ vars.CURSOR_CLOUD_MODEL }}
+          CURSOR_HEAL_WITH: cloud
         run: xvfb-run --auto-servernum --server-args="-screen 0 1400x900x24" npx playwright test --headed --grep-invert "splits"
 
       - name: Upload Playwright report

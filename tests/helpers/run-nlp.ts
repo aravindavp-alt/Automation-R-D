@@ -2,6 +2,8 @@ import { expect, type Page, type TestInfo } from "@playwright/test";
 import type { NlpCase } from "./nlp";
 import { extractPlaywrightCode, promptCloud } from "./cursor-cloud";
 import { judgeLocally } from "./judge";
+import { runNlpWithLocalPlaywright } from "./local-playwright";
+import { healWithLocalMcp } from "./mcp-heal";
 
 export type RunContext = {
   subject: string;
@@ -23,6 +25,12 @@ function requireGoto(code: string, label: string): string {
     throw new Error(`Cursor Cloud ${label} must include page.goto (complete script, not a mid-flow snippet)`);
   }
   return code;
+}
+
+function healBackend(): "mcp" | "cloud" {
+  const explicit = String(process.env.CURSOR_HEAL_WITH || "").trim().toLowerCase();
+  if (explicit === "mcp" || explicit === "cloud") return explicit;
+  return process.env.JENKINS_HOME ? "mcp" : "cloud";
 }
 
 async function compactDigest(page: Page): Promise<string> {
@@ -48,17 +56,6 @@ async function compactDigest(page: Page): Promise<string> {
   return `${url} | ${title} | in:${controls.inputs.join(",")} | btn:${controls.buttons.join(",")}`;
 }
 
-function generatePrompt(nlp: string, ctx: RunContext): string {
-  return [
-    "Empty workspace. Do not read files. Do not copy helpers or locators.",
-    "Write Playwright only from the NLP steps. page, expect, ctx exist. One js fence.",
-    "Complete script starting with await page.goto. No comments. No verdict.",
-    `ctx.subject=${ctx.subject}`,
-    "Use getByRole/getByLabel/getByText.",
-    nlp,
-  ].join("\n");
-}
-
 function healPrompt(nlp: string, digest: string, failedCode: string, failure: string, startUrl: string): string {
   return [
     "Empty workspace. Do not read files. Rewrite a COMPLETE Playwright script from NLP.",
@@ -79,7 +76,7 @@ async function runPlaywright(page: Page, ctx: RunContext, code: string): Promise
   await fn(page, expect, ctx);
 }
 
-async function requestCode(prompt: string, testInfo: TestInfo | undefined, label: string): Promise<string> {
+async function requestHealCode(prompt: string, testInfo: TestInfo | undefined, label: string): Promise<string> {
   const { answer, runId, model } = await promptCloud(prompt);
   console.log(`[nlp] Cursor Cloud no-repo ${label} model=${model} run=${runId || "none"}`);
   testInfo?.annotations.push({ type: "cursor-cloud", description: `no-repo ${label} ${model} ${runId || ""}` });
@@ -112,28 +109,34 @@ async function resetBrowser(page: Page, startUrl: string): Promise<void> {
   }
 }
 
-export async function runNlpWithCursorCloud(
+export async function runNlpCase(
   page: Page,
   nlp: NlpCase,
   ctx: RunContext,
   testInfo?: TestInfo,
 ): Promise<void> {
-  const script = nlpScript(nlp);
-  let code = await requestCode(generatePrompt(script, ctx), testInfo, "generate");
   try {
-    await runPlaywright(page, ctx, code);
+    console.log("[nlp] local Playwright (no LLM)");
+    await runNlpWithLocalPlaywright(page, nlp, ctx);
     await judgeLocally(page, nlp, ctx);
+    console.log("[nlp] PASS local Playwright");
     return;
   } catch (error) {
     if (HEAL_ATTEMPTS < 1) throw error;
     let lastError = error instanceof Error ? error.message : String(error);
     const digest = await compactDigest(page);
+    console.warn(`[nlp] local Playwright failed; reaching LLM (${healBackend()}): ${lastError.slice(0, 200)}`);
+    console.warn(`[nlp] digest ${digest.slice(0, 220)}`);
+
     for (let attempt = 1; attempt <= HEAL_ATTEMPTS; attempt++) {
-      console.warn(`Cursor Cloud heal ${attempt}/${HEAL_ATTEMPTS}: ${lastError.slice(0, 160)}`);
       await resetBrowser(page, nlp.startUrl);
       try {
-        code = await requestCode(
-          healPrompt(script, digest, code, lastError, nlp.startUrl),
+        if (healBackend() === "mcp") {
+          await healWithLocalMcp(nlp, ctx, lastError);
+          return;
+        }
+        const code = await requestHealCode(
+          healPrompt(nlpScript(nlp), digest, "", lastError, nlp.startUrl),
           testInfo,
           `heal-${attempt}`,
         );
@@ -144,9 +147,19 @@ export async function runNlpWithCursorCloud(
       } catch (healError) {
         lastError = healError instanceof Error ? healError.message : String(healError);
         if (attempt === HEAL_ATTEMPTS) {
-          throw new Error(`Cursor Cloud heal failed after ${HEAL_ATTEMPTS} attempt(s): ${lastError}`);
+          throw new Error(`LLM heal failed after ${HEAL_ATTEMPTS} attempt(s): ${lastError}`);
         }
       }
     }
   }
+}
+
+/** @deprecated use runNlpCase — local Playwright first, LLM only on failure */
+export async function runNlpWithCursorCloud(
+  page: Page,
+  nlp: NlpCase,
+  ctx: RunContext,
+  testInfo?: TestInfo,
+): Promise<void> {
+  return runNlpCase(page, nlp, ctx, testInfo);
 }

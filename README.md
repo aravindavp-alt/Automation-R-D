@@ -1,12 +1,12 @@
 # Automation-R-D
 
-NLP browser tests. Cursor Cloud is a **no-repo** agent: it does not clone this repository, so it cannot copy `wolken.ts` or other helpers. It is called **once** (`composer-2.5`) with the NLP steps and returns Playwright. Pass/fail is judged **locally** (case id, subject, Site ID, severity, product). If the script fails, the browser is reset and Cloud heals **once** from NLP plus the error — still with an empty workspace.
+NLP browser tests. The cheap path is **local Playwright** (no LLM tokens): it walks the `.nlp` steps with role/label/text locators and a local judge (case id, subject, Site ID, severity, product). **LLMs run only on failure.** Jenkins heals with a local Cursor agent + Playwright MCP + Chrome DevTools MCP. GitHub Actions heals with a no-repo Cursor Cloud rewrite of a Playwright script.
 
 ## Create Broadcom Standard case
 
 Test: [`tests/nlp/create-broadcom-standard-case.nlp`](tests/nlp/create-broadcom-standard-case.nlp)
 
-Add or change English steps in that file. The next run asks Cursor Cloud to interpret them.
+Add or change English steps in that file. The next run interprets them with local Playwright. Cursor is called only if that run fails.
 
 ## GitHub Actions (CI)
 
@@ -14,7 +14,7 @@ Add or change English steps in that file. The next run asks Cursor Cloud to inte
 2. Add:
    - `WOLKEN_USER`
    - `WOLKEN_PASSWORD`
-   - `CURSOR_API_KEY` — from [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations)
+   - `CURSOR_API_KEY` — from [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations) (used only if local Playwright fails)
 3. **Actions → Wolken NLP browser → Run workflow**
 
 Use a user or unrestricted service-account `CURSOR_API_KEY` (repository-scoped keys cannot start no-repo Cloud agents).
@@ -22,6 +22,25 @@ Use a user or unrestricted service-account `CURSOR_API_KEY` (repository-scoped k
 Pull requests only split/parse the NLP file. The headed Chromium run is `workflow_dispatch` or push to `main`.
 
 CI uses Node 24 via `actions/checkout@v7`, `actions/setup-node@v7`, and `actions/upload-artifact@v7`. npm cache is off so GitHub does not pull the deprecated Node 20 cache action.
+
+## Jenkins
+
+Pipeline: [`Jenkinsfile`](Jenkinsfile). It pulls the NLP from a Git repo, then:
+
+1. **Local headed Chrome + Playwright** runs the NLP (no LLM). Watch the window on this Mac; Jenkins console shows `[local] step N`.
+2. **On failure only**, a local Cursor agent starts **Playwright MCP** + **Chrome DevTools MCP** and finishes the case.
+
+Jenkins credentials:
+
+- `nlp-git` — Git username/password or SSH to clone the NLP repository
+- `cursor-api-key` — used only if local Playwright fails
+- `wolken-login` — Wolken username/password
+
+`HEADED=true` (default) shows Chrome. `CURSOR_HEAL_WITH=mcp` (default) is the failure path. There is no `xvfb-run` on this Mac; that wrapper is Linux-only.
+
+```bash
+NLP_FILE=tests/nlp/create-broadcom-standard-case.nlp npm run jenkins:nlp
+```
 
 ## Local
 

@@ -25,6 +25,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     video: "retain-on-failure",
     ignoreHTTPSErrors: true,
+    permissions: ["clipboard-read", "clipboard-write"],
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

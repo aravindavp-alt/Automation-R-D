@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 import { loadNlpCase, nlpPath } from "../helpers/nlp";
-import { runNlpWithCursorCloud } from "../helpers/run-nlp";
+import { runNlpCase } from "../helpers/run-nlp";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(20 * 60 * 1000);
@@ -26,10 +26,10 @@ test("NLP file splits into numbered steps", () => {
   }
 });
 
-test("NLP: Cursor Cloud parses and runs the case in a real browser", async ({ page }, testInfo) => {
+test("NLP: local Playwright runs the case; LLM heals on failure", async ({ page }, testInfo) => {
   const nlp = loadNlpCase(nlpPath("create-broadcom-standard-case.nlp"));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  await runNlpWithCursorCloud(
+  await runNlpCase(
     page,
     nlp,
     {
