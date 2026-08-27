@@ -40,7 +40,11 @@ async function main(): Promise<void> {
       "Customer reports a vSAN OSA cluster health issue on release 8.0U2c. Please investigate High-P2 impact.",
   };
 
-  console.log(`[jenkins] NLP ${filePath} steps=${nlp.steps.length} local Playwright first, LLM only on failure`);
+  const heal = String(process.env.CURSOR_HEAL_WITH || "mcp").trim().toLowerCase();
+  const headed = process.env.HEADED !== "false";
+  console.log(
+    `[jenkins] NLP ${filePath} steps=${nlp.steps.length} local Playwright first heal=${heal} headed=${headed} (LLM only on failure)`,
+  );
 
   const browser = await launchBrowser();
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });

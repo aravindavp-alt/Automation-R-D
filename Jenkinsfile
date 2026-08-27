@@ -34,15 +34,15 @@ pipeline {
       steps {
         sh '''
           set -e
-          if [ ! -f scripts/jenkins-run.ts ]; then
-            if [ ! -d "${RUNNER_DIR:-}" ]; then
-              echo "scripts/jenkins-run.ts is missing. Set RUNNER_DIR to the local Automation-R-D checkout."
-              exit 1
-            fi
-            rsync -a --exclude node_modules --exclude nlp-src --exclude .git "${RUNNER_DIR}/" "${WORKSPACE}/"
+          if [ ! -d "${RUNNER_DIR:-}" ]; then
+            echo "Set RUNNER_DIR to the local Automation-R-D checkout."
+            exit 1
           fi
+          # Always refresh. A leftover workspace copy still had CURSOR_RUNTIME=cloud.
+          rsync -a --exclude node_modules --exclude nlp-src --exclude .git "${RUNNER_DIR}/" "${WORKSPACE}/"
           test -f scripts/jenkins-run.ts
           test -f package.json
+          echo "[jenkins] runner from ${RUNNER_DIR} heal=${CURSOR_HEAL_WITH:-} headed=${HEADED:-}"
         '''
       }
     }
